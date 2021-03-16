@@ -22,10 +22,10 @@ function parseDom(dom) {
 
             // Get user's rating   
             let ratingJsonNodeInner = JSON.parse(ratingJsonNode.innerText);
-            let user_rate = `${ratingJsonNodeInner["r"]}`;
+            let user_vote = `${ratingJsonNodeInner["r"]}`;
 
-            if (user_rate === "0") {
-                user_rate = "";
+            if (user_vote === "0") {
+                user_vote = "";
             }
 
             // Get user's rating date (rating date is sometimes absent -> user timestamp)
@@ -49,7 +49,7 @@ function parseDom(dom) {
             arr.push({
                 Title: title,
                 Year: year,
-                Rating10: user_rate,
+                Rating10: user_vote,
                 WatchedDate: vote_date
             });
 
