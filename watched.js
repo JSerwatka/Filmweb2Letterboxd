@@ -103,18 +103,30 @@ function download(filename, text) {
 
 function arrayToCsv(allRates) {
     let csvRates = Object.keys(allRates[0]).join(",") + "\n";
-    allRates.forEach((dict) => {
-        csvRates += Object.values(dict).join(",");
-        csvRates += "\n";
-    });
+    let filesArray = []
 
-    return csvRates;
+    for (let i = 0; i < allRates.length; i++) {
+        // Split csv for rate count > 1800
+        if (i % 1800 == 0 && i > 0) {
+            console.log("split" + i.toString())
+            filesArray.push(csvRates);
+            csvRates = Object.keys(allRates[0]).join(",") + "\n";
+        }
+        csvRates += Object.values(allRates[i]).join(",");
+        csvRates += "\n";
+    }
+    filesArray.push(csvRates);
+
+    return filesArray;
 }
 
 function main () {
     let allRates = getAllRates();
     let csvRates = arrayToCsv(allRates);
-    download('Filmweb2Letterboxd_watched.csv', csvRates)
+
+    for (let i = 0; i < csvRates.length; i++) {
+        download(`Filmweb2Letterboxd_watched_${i}.csv`, csvRates[i])
+    }
 }
 
 main();
