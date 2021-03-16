@@ -44,13 +44,13 @@ function parseDom(dom) {
                 rate_month = date.getMonth().toString().padStart(2, "0");
                 rate_day = date.getDate().toString().padStart(2, "0");
             }
-            let rate_date = `${rate_year}-${rate_month}-${rate_day}`;
+            let vote_date = `${rate_year}-${rate_month}-${rate_day}`;
 
             arr.push({
                 Title: title,
                 Year: year,
                 Rating10: user_rate,
-                WatchedDate: rate_date
+                WatchedDate: vote_date
             });
 
             ratingBoxNode = iterator_card.iterateNext();
