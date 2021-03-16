@@ -1,7 +1,7 @@
 # Filmweb2Letterboxd
 ## O Projekcie
 
-Skrypty eksportują oceny filmów/seriali i "Chcę zobaczyć" z Filmweb'a do formatu csv.
+Skrypty eksportują oceny filmów/seriali i "Chcę zobaczyć" z Filmweb'u do formatu csv.
 Pliku csv ma następujące kolumny:
 * _Title_ - oryginalny tytuł programu, a jak nie znajdzie, to polski;
 * _Year_ - rok produkcji programu;
