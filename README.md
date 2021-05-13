@@ -30,5 +30,5 @@ Kod powstał na podstawie projektu [tomasz152/filmweb-export](https://github.com
 4. Wklej skrypt z pliku [watchlist.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/watchlist.js)
 
 ## Uwagi
-- Z powodu ograniczenia rozmiaru pliku, narzuconego przez importer Letterboxd, skrypy dzieli obejrzane filmy/seriale na kilka plików (max 1800 wierszy).
+- Z powodu ograniczenia rozmiaru pliku, narzuconego przez importer Letterboxd, skrypt dzieli obejrzane filmy/seriale na kilka plików (max 1800 wierszy).
 - Częste zmiany na stronie Filmweb'u powodują, że skrypty i API szybko stają się nieaktualne. Gdyby tak się stało, można śmiało zgłaszać swoje _PR_ lub _Issues_.
