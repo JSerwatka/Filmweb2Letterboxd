@@ -8,26 +8,27 @@ Pliku csv ma następujące kolumny:
 * _Rating10_ - ocena użytkownika;
 * _WatchedDate_ - data obejrzenia.
 
-Kod powstał na podstawie projektu [tomasz152/filmweb-export](https://github.com/tomasz152/filmweb-export).
-
 ## Jak używać
 ### Pobranie obejrzanych filmów
 1. Zaloguj się do Filmweb'a.
 2. Przejdź do `https://www.filmweb.pl/user/<username>/films`.
 3. Otwórz konsolę (*ctrl+shift+i*  -> _Console_).
 4. Wklej skrypt z pliku [watched.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/watched.js)
+5. Zostaw kartę otwartą i nie przełączaj na żadną inną!
 
 ### Pobranie obejrzanych seriali
 1. Zaloguj się do Filmweb'a.
 2. Przejdź do `https://www.filmweb.pl/user/<username>/serials`.
 3. Otwórz konsolę (*ctrl+shift+i*  -> _Console_).
 4. Wklej skrypt z pliku [watched.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/watched.js)
+5. Zostaw kartę otwartą i nie przełączaj na żadną inną!
 
 ### Pobranie "Chcę zobaczyć"
 1. Zaloguj się do Filmweb'a.
 2. Przejdź do `https://www.filmweb.pl/user/<username>/wantToSee`.
 3. Otwórz konsolę (*ctrl+shift+i* -> _Console_).
 4. Wklej skrypt z pliku [watchlist.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/watchlist.js)
+5. Zostaw kartę otwartą i nie przełączaj na żadną inną!
 
 ## Uwagi
 - Z powodu ograniczenia rozmiaru pliku, narzuconego przez importer Letterboxd, skrypt dzieli obejrzane filmy/seriale na kilka plików (max 1800 wierszy).

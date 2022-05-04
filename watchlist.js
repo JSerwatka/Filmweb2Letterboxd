@@ -1,66 +1,64 @@
-function parseDom(dom) {
-    let iterator_card = dom.evaluate('//div[contains(@class, "voteBoxes__box")]',
-        dom, null, XPathResult.UNORDERED_NODE_ITERATOR_TYPE, null);
+const parseDom = (dom) => {
+    const moviesNodes = dom.querySelectorAll("div.voteBoxes__box");
     let arr = [];
-    try {
-        let ratingBoxNode = iterator_card.iterateNext();
-        while (ratingBoxNode) {
-            // Get movie's title -> str
-            let title = dom.evaluate('.//div[contains(@class, "filmPreview__originalTitle")]',
-                ratingBoxNode, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            if (title == null)
-                title = dom.evaluate('.//h2[contains(@class, "filmPreview__title")]',
-                    ratingBoxNode, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            title = `\"${title.textContent}\"` 
 
-            // Get movie's release year -> str
-            let year = dom.evaluate('.//div[contains(@class, "filmPreview__extraYear")]',
-                ratingBoxNode, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.textContent;
+    try {
+        for (movie of moviesNodes) {
+            let title = movie.querySelector("div.preview__originalTitle")?.textContent;
+            if (!title) {
+                title = movie.querySelector("h2.preview__title").textContent;
+            }
+        
+            const year = movie.querySelector("div.preview__year").textContent;
 
             arr.push({
-                Title: title,
+                Title: title.includes(",") ? `"${title}"` : title,
                 Year: year
             });
-
-            ratingBoxNode = iterator_card.iterateNext();
         }
+
         return arr;
-    } catch (e) {
+    }
+    catch (e) {
         console.log('Wystąpił problem z parsowaniem strony ' + e);
         return [];
     }
-}
+};
 
-function getSourceAsDOM(url) {
-    let xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", url, false);
-    xmlhttp.send();
-    let parser = new DOMParser();
-    return parser.parseFromString(xmlhttp.responseText, "text/html");
-}
+const getIframeDom = async (url) => {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", url);
+    iframe.setAttribute("height", 200);
+    iframe.setAttribute("width", 200);
+    document.body.appendChild(iframe);
 
-function getAllRates() {
-    let ratesNum = document.evaluate('//span[contains(@class, "blockHeader__titleInfoCount")]',
-        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.textContent;
-    let pages = Math.ceil(ratesNum / 25);
-    let url = window.location.href;
+    return new Promise(resolve => iframe.addEventListener("load", async () => {
+        const childDocument = (iframe.contentDocument || iframe.contentWindow.document).documentElement;
+        iframe.remove()
+        resolve(childDocument);
+    }))
+};
+
+const getAllRates = async () => {
+    const ratesNum = Number(document.querySelector(".blockHeader__titleInfoCount").textContent)
+    const numOfPages = Math.ceil(ratesNum / 25);
+    const userFilmwebUrl = window.location.href;
+    let allRates = []
 
     console.log("Rozpoczynam pobieranie, cierpliwości...");
-    let allRates = parseDom(document);
-    for (let i = 2; i <= pages; i++) {
-        let dom = getSourceAsDOM(url + "?page=" + i);
+    for (let i = 1; i <= numOfPages; i++) {
+        const dom = await getIframeDom(userFilmwebUrl + "?page=" + i);
         allRates = allRates.concat(parseDom(dom));
         console.log("pobrano " + Math.min(25 * i, ratesNum) + " z " + ratesNum);
     }
 
     return allRates;
-}
+};
 
-function download(filename, text) {
-    let element = document.createElement('a');
+const download = (filename, text) => {
+    const element = document.createElement('a');
     element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
     element.setAttribute('download', filename);
-
     element.style.display = 'none';
     document.body.appendChild(element);
 
@@ -69,7 +67,8 @@ function download(filename, text) {
     document.body.removeChild(element);
 }
 
-function arrayToCsv(allRates) {
+
+const arrayToCsv = (allRates) => {
     let csvRates = Object.keys(allRates[0]).join(",") + "\n";
     allRates.forEach((dict) => {
         csvRates += Object.values(dict).join(",");
@@ -77,12 +76,12 @@ function arrayToCsv(allRates) {
     });
 
     return csvRates;
-}
+};
 
-function main () {
-    let allRates = getAllRates();
+const main = async () => {
+    let allRates = await getAllRates();
     let csvRates = arrayToCsv(allRates);
     download('Filmweb2Letterboxd_watchlist.csv', csvRates)
-}
+};
 
 main();

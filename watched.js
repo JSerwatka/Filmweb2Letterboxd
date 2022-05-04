@@ -1,98 +1,117 @@
-function parseDom(dom) {
-    let iterator_card = dom.evaluate('//div[contains(@class, "voteBoxes__box")]',
-        dom, null, XPathResult.UNORDERED_NODE_ITERATOR_TYPE, null);
-    let iterator_votes = dom.evaluate('//span[contains(@data-source, "userVotes")]/script[contains(@type, "application/json")]',
-        dom, null, XPathResult.UNORDERED_NODE_ITERATOR_TYPE, null);
+const monthMapper = {
+    "stycznia": "01",
+    "lutego": "02",
+    "marca": "03",
+    "kwietnia": "04",
+    "maja": "05",
+    "czerwca": "06",
+    "lipca": "07",
+    "sierpnia": "08",
+    "września": "09",
+    "października": "10",
+    "listopada": "11",
+    "grudnia": "12"
+};
+
+const mapDate = (date) => {
+    const [day, monthName, year] = date.split(" ");
+
+    if (!year || !monthName || !day) {
+        return "";
+    }
+
+    return `${year}-${monthMapper[monthName]}-${day.padStart(2, "0")}`;
+};
+
+const parseDom = (dom) => {
+    const moviesNodes = dom.querySelectorAll("div.voteBoxes__box");
     let arr = [];
+
     try {
-        let ratingBoxNode = iterator_card.iterateNext();
-        let ratingJsonNode = iterator_votes.iterateNext();
-        while (ratingBoxNode) {
-            // Get movie's title -> str
-            let title = dom.evaluate('.//div[contains(@class, "filmPreview__originalTitle")]',
-                ratingBoxNode, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            if (title == null)
-                title = dom.evaluate('.//h2[contains(@class, "filmPreview__title")]',
-                    ratingBoxNode, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            title = `\"${title.textContent}\"` 
-
-            // Get movie's release year -> str
-            let year = dom.evaluate('.//div[contains(@class, "filmPreview__extraYear")]',
-                ratingBoxNode, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.textContent;
-
-            // Get user's rating   
-            let ratingJsonNodeInner = JSON.parse(ratingJsonNode.innerText);
-            let user_vote = `${ratingJsonNodeInner["r"]}`;
-
-            if (user_vote === "0") {
-                user_vote = "";
+        for (movie of moviesNodes) {
+            let title = movie.querySelector("div.preview__originalTitle")?.textContent;
+            if (!title) {
+                title = movie.querySelector("h2.preview__title").textContent;
             }
-
-            // Get user's rating date (rating date is sometimes absent -> user timestamp)
-            let vote_year = "";
-            let vote_month = "";
-            let vote_day = "";
-
-            if ("d" in ratingJsonNodeInner) {
-                vote_year = ratingJsonNodeInner["d"]["y"].toString();
-                vote_month = ratingJsonNodeInner["d"]["m"].toString().padStart(2, "0");
-                vote_day = ratingJsonNodeInner["d"]["d"].toString().padStart(2, "0");
-            }
-            else {
-                date = new Date(ratingJsonNodeInner["t"] * 1000);
-                vote_year = date.getFullYear()
-                vote_month = date.getMonth().toString().padStart(2, "0");
-                vote_day = date.getDate().toString().padStart(2, "0");
-            }
-            let vote_date = `${vote_year}-${vote_month}-${vote_day}`;
+        
+            const year = movie.querySelector("div.preview__year").textContent;
+            const userVote = movie.querySelector("span.userRate__rate").textContent;
+            const voteDate = mapDate(movie.querySelector(".voteCommentBox__date").textContent);
 
             arr.push({
-                Title: title,
+                Title: title.includes(",") ? `"${title}"` : title,
                 Year: year,
-                Rating10: user_vote,
-                WatchedDate: vote_date
+                Rating10: userVote,
+                WatchedDate: voteDate
             });
-
-            ratingBoxNode = iterator_card.iterateNext();
-            ratingJsonNode = iterator_votes.iterateNext();
         }
+
         return arr;
-    } catch (e) {
+    }
+    catch (e) {
         console.log('Wystąpił problem z parsowaniem strony ' + e);
         return [];
     }
-}
+};
 
-function getSourceAsDOM(url) {
-    let xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", url, false);
-    xmlhttp.send();
-    let parser = new DOMParser();
-    return parser.parseFromString(xmlhttp.responseText, "text/html");
-}
+const waitForCommentSectionToLoad = async (iframe, i) => {
+    return new Promise((resolve) => {
+        const waitForDateInterval = setInterval(() => {
+            const childDocument = (iframe.contentDocument || iframe.contentWindow.document).documentElement;
+            const commentSections = childDocument.querySelectorAll(".voteCommentBox");
+        
+            commentSections[i].scrollIntoView(false);
+        
+            if (commentSections[i].querySelector(".voteCommentBox__date").textContent) {
+                clearInterval(waitForDateInterval);
+                resolve();
+            }
+        }, 100)
+    })
 
-function getAllRates() {
-    let ratesNum = document.evaluate('//span[contains(@class, "blockHeader__titleInfoCount")]',
-        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.textContent;
-    let pages = Math.ceil(ratesNum / 25);
-    let url = window.location.href;
+};
+
+const getIframeDom = async (url) => {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", url);
+    iframe.setAttribute("height", 200);
+    iframe.setAttribute("width", 200);
+    document.body.appendChild(iframe);
+
+    return new Promise(resolve => iframe.addEventListener("load", async () => {
+        const childDocument = (iframe.contentDocument || iframe.contentWindow.document).documentElement;
+        const commentSections = childDocument.querySelectorAll(".voteCommentBox");
+
+        for (let i = 0; i < commentSections.length; i++) {
+            await waitForCommentSectionToLoad(iframe, i);
+        }
+
+        const dom = (iframe.contentDocument || iframe.contentWindow.document).documentElement;
+        iframe.remove()
+        resolve(dom);
+    }))
+};
+
+const getAllRates = async () => {
+    const ratesNum = Number(document.querySelector(".blockHeader__titleInfoCount").textContent)
+    const numOfPages = Math.ceil(ratesNum / 25);
+    const userFilmwebUrl = window.location.href;
+    let allRates = []
 
     console.log("Rozpoczynam pobieranie, cierpliwości...");
-    let allRates = parseDom(document);
-    for (let i = 2; i <= pages; i++) {
-        let dom = getSourceAsDOM(url + "?page=" + i);
+    for (let i = 1; i <= numOfPages; i++) {
+        const dom = await getIframeDom(userFilmwebUrl + "?page=" + i);
         allRates = allRates.concat(parseDom(dom));
         console.log("pobrano " + Math.min(25 * i, ratesNum) + " z " + ratesNum);
     }
 
     return allRates;
-}
+};
 
-function download(filename, text) {
-    let element = document.createElement('a');
+const download = (filename, text) => {
+    const element = document.createElement('a');
     element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
     element.setAttribute('download', filename);
-
     element.style.display = 'none';
     document.body.appendChild(element);
 
@@ -101,14 +120,14 @@ function download(filename, text) {
     document.body.removeChild(element);
 }
 
-function arrayToCsv(allRates) {
+
+const arrayToCsv = (allRates) => {
     let csvRates = Object.keys(allRates[0]).join(",") + "\n";
     let filesArray = []
 
     for (let i = 0; i < allRates.length; i++) {
         // Split csv for rate count > 1800
-        if (i % 1800 == 0 && i > 0) {
-            console.log("split" + i.toString())
+        if (i % 1799 == 0 && i > 0) {
             filesArray.push(csvRates);
             csvRates = Object.keys(allRates[0]).join(",") + "\n";
         }
@@ -118,15 +137,15 @@ function arrayToCsv(allRates) {
     filesArray.push(csvRates);
 
     return filesArray;
-}
+};
 
-function main () {
-    let allRates = getAllRates();
+const main = async () => {
+    let allRates = await getAllRates();
     let csvRates = arrayToCsv(allRates);
 
     for (let i = 0; i < csvRates.length; i++) {
         download(`Filmweb2Letterboxd_watched_${i}.csv`, csvRates[i])
     }
-}
+};
 
 main();
