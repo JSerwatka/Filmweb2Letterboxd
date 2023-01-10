@@ -31,9 +31,12 @@ const parseDom = (dom) => {
         for (movie of moviesNodes) {
             let title = movie.querySelector("div.preview__originalTitle")?.textContent;
             if (!title) {
-                title = movie.querySelector("h2.preview__title").textContent;
+                title = movie.querySelector("div.preview__alternateTitle")?.textContent;
+                if (!title) {
+                    title = movie.querySelector("h2.preview__title").textContent;
+                }
             }
-        
+
             const year = movie.querySelector("div.preview__year").textContent;
             const userVote = movie.querySelector("span.userRate__rate").textContent;
             const voteDate = mapDate(movie.querySelector(".voteCommentBox__date").textContent);
