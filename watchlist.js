@@ -1,69 +1,265 @@
-const parseDom = (dom) => {
-  const moviesNodes = dom.querySelectorAll("div.voteBoxes__box");
-  let arr = [];
+function loadAllInfiniteScrollChildren(allMoviesContainer, expectedChildCount) {
+  function scrollToBottom() {
+    window.scrollTo(0, document.body.scrollHeight);
+  }
 
-  try {
-    for (movie of moviesNodes) {
-      let title = movie.querySelector(
-        "div.preview__alternateTitle"
-      )?.textContent;
-
-      if (!title) {
-        title = movie.querySelector("h2.preview__title").textContent;
-      }
-
-      const year = movie.querySelector("div.preview__year").textContent;
-
-      arr.push({
-        Title: title.includes(",") ? `"${title}"` : title,
-        Year: year,
-      });
+  return new Promise((resolve, reject) => {
+    if (!allMoviesContainer) {
+      reject("Błąd skryptu: Target element not found.");
+      return;
     }
 
-    return arr;
-  } catch (e) {
-    console.log("Wystąpił problem z parsowaniem strony " + e);
-    return [];
-  }
-};
+    if (!expectedChildCount) {
+      reject("Błąd skryptu: No children found");
+      return;
+    }
 
-const getIframeDom = async (url) => {
-  const iframe = document.createElement("iframe");
+    const currentChildCount = allMoviesContainer.children.length;
+    if (currentChildCount >= expectedChildCount) {
+      resolve(allMoviesContainer.children);
+    }
+
+    const checkAndScroll = (mutationsList) => {
+      for (const mutation of mutationsList) {
+        if (mutation.type === "childList") {
+          scrollToBottom();
+          const currentChildCount = allMoviesContainer.children.length;
+          if (currentChildCount >= expectedChildCount) {
+            // All expected children are now visible, scrolling is done
+            observer.disconnect();
+            resolve(allMoviesContainer.children);
+          }
+        }
+      }
+    };
+
+    const observer = new MutationObserver(checkAndScroll);
+
+    observer.observe(allMoviesContainer, { childList: true, subtree: true });
+
+    // Initialize creating new children
+    scrollToBottom();
+  });
+}
+
+async function parseDomToFilmData(dom) {
+  const titleElement = await waitForElement(
+    dom,
+    ".filmCoverSection__titleDetails"
+  );
+
+  try {
+    let title = await waitForElementData(
+      titleElement,
+      ".filmCoverSection__originalTitle",
+      { textContent: true }
+    );
+    if (!title) {
+      title = await waitForElementData(
+        titleElement,
+        ".filmCoverSection__title",
+        { textContent: true }
+      );
+    }
+    const year = await waitForElementData(
+      titleElement,
+      ".filmCoverSection__year",
+      { textContent: true }
+    );
+
+    return {
+      Title: title.includes(",") ? `"${title}"` : title,
+      Year: year,
+    };
+  } catch (e) {
+    throw new Error("Błąd skryptu: Wystąpił problem z parsowaniem strony " + e);
+  }
+}
+
+async function waitForElement(baseElement, selector, timeout = 5000) {
+  let timeoutId;
+
+  return new Promise((resolve) => {
+    if (baseElement.querySelector(selector)) {
+      return resolve(baseElement.querySelector(selector));
+    }
+
+    const observer = new MutationObserver((mutations) => {
+      if (baseElement.querySelector(selector)) {
+        timeoutId && clearTimeout(timeoutId);
+        observer.disconnect();
+        resolve(baseElement.querySelector(selector));
+      }
+    });
+
+    observer.observe(baseElement, {
+      childList: true,
+      subtree: true,
+    });
+
+    timeoutId = setTimeout(() => {
+      observer.disconnect();
+      resolve(undefined);
+    }, timeout);
+  });
+}
+
+async function waitForElementData(
+  baseElement,
+  selector,
+  dataToObserve,
+  timeout = 3000
+) {
+  const { dataAttribute, textContent, titleAttribute } = dataToObserve;
+
+  const countObservedData = [dataAttribute, textContent, titleAttribute].filter(
+    (data) => Boolean(data)
+  );
+  if (countObservedData.length > 1) {
+    throw new Error("only one attribute can be observed");
+  }
+  if (countObservedData.length < 1) {
+    throw new Error("at least one attribute has to be observed");
+  }
+
+  const attributeFilter = [];
+  dataAttribute && attributeFilter.push(dataAttribute);
+  titleAttribute && attributeFilter.push("title");
+
+  const observerOptions = {
+    childList: true,
+    subtree: true,
+    characterData: Boolean(textContent),
+    ...(attributeFilter.length > 0 && {
+      attributes: true,
+      attributeFilter: attributeFilter,
+    }),
+  };
+
+  const getValue = () => {
+    const element = baseElement.querySelector(selector);
+    if (dataAttribute) {
+      const dataAttributeNameParts = dataAttribute.split("-").slice(1);
+      if (dataAttributeNameParts.length === 1) {
+        return element?.dataset[dataAttributeNameParts[0]];
+      }
+      if (dataAttributeNameParts.length > 1) {
+        const dataAttributeCapitalizedNameParts = dataAttributeNameParts
+          .slice(1)
+          .map(
+            (item) =>
+              item.charAt(0).toUpperCase() + item.substr(1).toLowerCase()
+          );
+        const dataAttributeMapped = [
+          dataAttributeNameParts[0],
+          ...dataAttributeCapitalizedNameParts,
+        ].join("");
+        return element?.dataset[dataAttributeMapped];
+      }
+      throw new Error("Incorrect data attribute");
+    }
+    if (titleAttribute && element?.title) {
+      return element?.title;
+    }
+    if (textContent && element?.textContent) {
+      return element?.textContent;
+    }
+  };
+
+  let timeoutId;
+
+  return new Promise((resolve) => {
+    let value = getValue();
+    if (value) {
+      return resolve(value);
+    }
+    const observer = new MutationObserver(() => {
+      let value = getValue();
+
+      if (value) {
+        timeoutId && clearTimeout(timeoutId);
+        observer.disconnect();
+        resolve(value);
+      }
+    });
+
+    observer.observe(baseElement, observerOptions);
+
+    timeoutId = setTimeout(() => {
+      observer.disconnect();
+      resolve(undefined);
+    }, timeout);
+  });
+}
+
+async function getIframeDom(url, iframe) {
   iframe.setAttribute("src", url);
-  iframe.setAttribute("height", 200);
-  iframe.setAttribute("width", 200);
-  document.body.appendChild(iframe);
 
   return new Promise((resolve) =>
     iframe.addEventListener("load", async () => {
       const childDocument = (
         iframe.contentDocument || iframe.contentWindow.document
       ).documentElement;
-      iframe.remove();
-      resolve(childDocument);
+      iframe.contentWindow.scrollTo({
+        top: childDocument.scrollHeight,
+        left: 0,
+        behavior: "smooth",
+      });
+      await waitForElement(childDocument, ".filmCoverSection__titleDetails");
+      const dom = (iframe.contentDocument || iframe.contentWindow.document)
+        .documentElement;
+      iframe.contentWindow.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      resolve(dom);
     })
   );
-};
+}
 
-const getAllRates = async () => {
-  const ratesNum = Number(
-    document.querySelector(".blockHeader__titleInfoCount").textContent
+async function getAllRates() {
+  const allMoviesContainer = document.querySelector(
+    'div[data-group="userPage"]  section > div:nth-child(2)'
   );
-  const numOfPages = Math.ceil(ratesNum / 25);
-  const userFilmwebUrl = window.location.href;
-  let allRates = [];
+  const expectedChildCount = Number(
+    document.querySelector(
+      'div[data-group="userPage"] li > a.active[data-counter]'
+    ).dataset.counter ?? ""
+  );
+  let allMoviesElements;
 
-  console.log("Rozpoczynam pobieranie, cierpliwości...");
-  for (let i = 1; i <= numOfPages; i++) {
-    const dom = await getIframeDom(userFilmwebUrl + "?page=" + i);
-    allRates = allRates.concat(parseDom(dom));
-    console.log("pobrano " + Math.min(25 * i, ratesNum) + " z " + ratesNum);
+  try {
+    allMoviesElements = await loadAllInfiniteScrollChildren(
+      allMoviesContainer,
+      expectedChildCount
+    );
+  } catch (error) {
+    throw new Error(error);
   }
 
-  return allRates;
-};
+  const allRates = [];
 
-const download = (filename, text) => {
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("height", 200);
+  iframe.setAttribute("width", 200);
+  document.body.appendChild(iframe);
+
+  for (let i = 0; i <= expectedChildCount - 1; i++) {
+    const movieLink = allMoviesElements[i].querySelector("a").href;
+    try {
+      const dom = await getIframeDom(movieLink, iframe);
+      const parsedData = await parseDomToFilmData(dom);
+      allRates.push(parsedData);
+    } catch (e) {
+      console.log(e);
+      return;
+    }
+    console.log("pobrano " + (i + 1) + " z " + expectedChildCount);
+  }
+
+  iframe.remove();
+
+  return allRates;
+}
+
+function download(filename, text) {
   const element = document.createElement("a");
   element.setAttribute(
     "href",
@@ -76,22 +272,36 @@ const download = (filename, text) => {
   element.click();
 
   document.body.removeChild(element);
-};
+}
 
-const arrayToCsv = (allRates) => {
+function arrayToCsv(allRates) {
   let csvRates = Object.keys(allRates[0]).join(",") + "\n";
-  allRates.forEach((dict) => {
-    csvRates += Object.values(dict).join(",");
+  let filesArray = [];
+
+  for (let i = 0; i < allRates.length; i++) {
+    // Split csv for rate count > 1800
+    if (i % 1799 == 0 && i > 0) {
+      filesArray.push(csvRates);
+      csvRates = Object.keys(allRates[0]).join(",") + "\n";
+    }
+    csvRates += Object.values(allRates[i]).join(",");
     csvRates += "\n";
-  });
+  }
+  filesArray.push(csvRates);
 
-  return csvRates;
-};
+  return filesArray;
+}
 
-const main = async () => {
+async function main() {
+  console.log("Rozpoczynam pobieranie, cierpliwości...");
+  console.log("Proszę nie zamykać, przełączać, ani minimalizować tego okna!");
   let allRates = await getAllRates();
+  console.log("rozpoczynam ściąganie pliku csv");
   let csvRates = arrayToCsv(allRates);
-  download("Filmweb2Letterboxd_watchlist.csv", csvRates);
-};
+
+  for (let i = 0; i < csvRates.length; i++) {
+    download(`Filmweb2Letterboxd_watched_${i}.csv`, csvRates[i]);
+  }
+}
 
 main();
