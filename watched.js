@@ -92,10 +92,10 @@ async function getMovieData(movieUrl) {
     ".filmCoverSection__titleDetails > .filmCoverSection__year"
   )?.textContent;
   year = year.split(" - ")[0]; // handle serial dates
-  const id = htmlDocument.querySelector("a[data-filmid]")?.dataset?.filmid;
+  const movieId = htmlDocument.querySelector("[data-film-id]")?.dataset?.filmId;
 
   return {
-    id,
+    movieId,
     movieData: {
       Title: title.includes(",") ? `"${title}"` : title,
       Year: year,
@@ -160,11 +160,11 @@ async function getAllRates() {
     const movieLink = allMoviesElements[i].querySelector("a").href;
 
     try {
-      const { id, movieData } = await getMovieData(movieLink);
-      if (!id || !movieData) {
+      const { movieId, movieData } = await getMovieData(movieLink);
+      if (!movieId || !movieData) {
         continue;
       }
-      const ratingData = await getRatingData(id, contentType);
+      const ratingData = await getRatingData(movieId, contentType);
 
       allRates.push({ ...movieData, ...ratingData });
     } catch (e) {
