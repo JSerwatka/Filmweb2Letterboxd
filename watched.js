@@ -211,22 +211,26 @@ async function getIframeDom(url, iframe) {
   iframe.setAttribute("src", url);
 
   return new Promise((resolve) =>
-    iframe.addEventListener("load", async () => {
-      const childDocument = (
-        iframe.contentDocument || iframe.contentWindow.document
-      ).documentElement;
-      iframe.contentWindow.scrollTo({
-        top: childDocument.scrollHeight,
-        left: 0,
-        behavior: "smooth",
-      });
-      await waitForElement(childDocument, ".filmRatingBox__mainCard");
-      await waitForElement(childDocument, ".filmCoverSection__titleDetails");
-      const dom = (iframe.contentDocument || iframe.contentWindow.document)
-        .documentElement;
-      iframe.contentWindow.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-      resolve(dom);
-    })
+    iframe.addEventListener(
+      "load",
+      async () => {
+        const childDocument = (
+          iframe.contentDocument || iframe.contentWindow.document
+        ).documentElement;
+        iframe.contentWindow.scrollTo({
+          top: childDocument.scrollHeight,
+          left: 0,
+          behavior: "smooth",
+        });
+        await waitForElement(childDocument, ".filmRatingBox__mainCard");
+        await waitForElement(childDocument, ".filmCoverSection__titleDetails");
+        const dom = (iframe.contentDocument || iframe.contentWindow.document)
+          .documentElement;
+        iframe.contentWindow.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+        resolve(dom);
+      },
+      { once: true }
+    )
   );
 }
 
@@ -252,26 +256,27 @@ async function getAllRates() {
 
   const allRates = [];
 
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("height", 200);
-  iframe.setAttribute("width", 200);
-  document.body.appendChild(iframe);
-
   for (let i = 0; i <= expectedChildCount - 1; i++) {
     const movieLink = allMoviesElements[i].querySelector("a").href;
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("height", 200);
+    iframe.setAttribute("width", 200);
+    document.body.appendChild(iframe);
+
     try {
       const dom = await getIframeDom(movieLink, iframe);
       const parsedData = await parseDomToFilmData(dom);
       allRates.push(parsedData);
     } catch (e) {
       console.log(e);
-      return;
+      return allRates;
+    } finally {
+      iframe.src = "about:blank";
+      document.body.removeChild(iframe);
     }
     console.log("pobrano " + (i + 1) + " z " + expectedChildCount);
   }
-
-  iframe.remove();
-
   return allRates;
 }
 
