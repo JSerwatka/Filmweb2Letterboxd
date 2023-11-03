@@ -24,6 +24,7 @@ function loadAllInfiniteScrollChildren(allMoviesContainer, expectedChildCount) {
         if (mutation.type === "childList") {
           scrollToBottom();
           const currentChildCount = allMoviesContainer.children.length;
+
           if (currentChildCount >= expectedChildCount) {
             // All expected children are now visible, scrolling is done
             observer.disconnect();
@@ -42,176 +43,59 @@ function loadAllInfiniteScrollChildren(allMoviesContainer, expectedChildCount) {
   });
 }
 
-async function parseDomToFilmData(dom) {
-  const titleElement = await waitForElement(
-    dom,
-    ".filmCoverSection__titleDetails"
-  );
+function formatDate(dateNumber) {
+  const dateStr = dateNumber.toString();
 
-  try {
-    let title = await waitForElementData(
-      titleElement,
-      ".filmCoverSection__originalTitle",
-      { textContent: true }
-    );
-    if (!title) {
-      title = await waitForElementData(
-        titleElement,
-        ".filmCoverSection__title",
-        { textContent: true }
-      );
-    }
-    const year = await waitForElementData(
-      titleElement,
-      ".filmCoverSection__year",
-      { textContent: true }
-    );
+  const year = dateStr.substring(0, 4);
+  const month = dateStr.substring(4, 6);
+  const day = dateStr.substring(6, 8);
 
-    return {
-      Title: title.includes(",") ? `"${title}"` : title,
-      Year: year,
-    };
-  } catch (e) {
-    throw new Error("Błąd skryptu: Wystąpił problem z parsowaniem strony " + e);
-  }
+  return `${year}-${month}-${day}`;
 }
 
-async function waitForElement(baseElement, selector, timeout = 5000) {
-  let timeoutId;
+async function getMovieData(movieUrl) {
+  const parser = new DOMParser();
 
-  return new Promise((resolve) => {
-    if (baseElement.querySelector(selector)) {
-      return resolve(baseElement.querySelector(selector));
-    }
-
-    const observer = new MutationObserver((mutations) => {
-      if (baseElement.querySelector(selector)) {
-        timeoutId && clearTimeout(timeoutId);
-        observer.disconnect();
-        resolve(baseElement.querySelector(selector));
+  const DOMContent = await fetch(movieUrl, {
+    method: "GET",
+    headers: {
+      Cookie: document.cookie,
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Bład skryptu podczas ściągania danych filmu`);
       }
-    });
-
-    observer.observe(baseElement, {
-      childList: true,
-      subtree: true,
-    });
-
-    timeoutId = setTimeout(() => {
-      observer.disconnect();
-      resolve(undefined);
-    }, timeout);
-  });
-}
-
-async function waitForElementData(
-  baseElement,
-  selector,
-  dataToObserve,
-  timeout = 3000
-) {
-  const { dataAttribute, textContent, titleAttribute } = dataToObserve;
-
-  const countObservedData = [dataAttribute, textContent, titleAttribute].filter(
-    (data) => Boolean(data)
-  );
-  if (countObservedData.length > 1) {
-    throw new Error("only one attribute can be observed");
-  }
-  if (countObservedData.length < 1) {
-    throw new Error("at least one attribute has to be observed");
-  }
-
-  const attributeFilter = [];
-  dataAttribute && attributeFilter.push(dataAttribute);
-  titleAttribute && attributeFilter.push("title");
-
-  const observerOptions = {
-    childList: true,
-    subtree: true,
-    characterData: Boolean(textContent),
-    ...(attributeFilter.length > 0 && {
-      attributes: true,
-      attributeFilter: attributeFilter,
-    }),
-  };
-
-  const getValue = () => {
-    const element = baseElement.querySelector(selector);
-    if (dataAttribute) {
-      const dataAttributeNameParts = dataAttribute.split("-").slice(1);
-      if (dataAttributeNameParts.length === 1) {
-        return element?.dataset[dataAttributeNameParts[0]];
-      }
-      if (dataAttributeNameParts.length > 1) {
-        const dataAttributeCapitalizedNameParts = dataAttributeNameParts
-          .slice(1)
-          .map(
-            (item) =>
-              item.charAt(0).toUpperCase() + item.substr(1).toLowerCase()
-          );
-        const dataAttributeMapped = [
-          dataAttributeNameParts[0],
-          ...dataAttributeCapitalizedNameParts,
-        ].join("");
-        return element?.dataset[dataAttributeMapped];
-      }
-      throw new Error("Incorrect data attribute");
-    }
-    if (titleAttribute && element?.title) {
-      return element?.title;
-    }
-    if (textContent && element?.textContent) {
-      return element?.textContent;
-    }
-  };
-
-  let timeoutId;
-
-  return new Promise((resolve) => {
-    let value = getValue();
-    if (value) {
-      return resolve(value);
-    }
-    const observer = new MutationObserver(() => {
-      let value = getValue();
-
-      if (value) {
-        timeoutId && clearTimeout(timeoutId);
-        observer.disconnect();
-        resolve(value);
-      }
-    });
-
-    observer.observe(baseElement, observerOptions);
-
-    timeoutId = setTimeout(() => {
-      observer.disconnect();
-      resolve(undefined);
-    }, timeout);
-  });
-}
-
-async function getIframeDom(url, iframe) {
-  iframe.setAttribute("src", url);
-
-  return new Promise((resolve) =>
-    iframe.addEventListener("load", async () => {
-      const childDocument = (
-        iframe.contentDocument || iframe.contentWindow.document
-      ).documentElement;
-      iframe.contentWindow.scrollTo({
-        top: childDocument.scrollHeight,
-        left: 0,
-        behavior: "smooth",
-      });
-      await waitForElement(childDocument, ".filmCoverSection__titleDetails");
-      const dom = (iframe.contentDocument || iframe.contentWindow.document)
-        .documentElement;
-      iframe.contentWindow.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-      resolve(dom);
+      return response.text();
     })
-  );
+    .catch((error) => {
+      console.log(error);
+      return undefined;
+    });
+
+  if (!DOMContent) {
+    return undefined;
+  }
+
+  const htmlDocument = parser.parseFromString(DOMContent, "text/html");
+
+  let title = htmlDocument.querySelector(
+    ".filmCoverSection__titleDetails > .filmCoverSection__originalTitle"
+  )?.textContent;
+  if (!title) {
+    title = htmlDocument.querySelector(
+      ".filmCoverSection__titleDetails > .filmCoverSection__title"
+    )?.textContent;
+  }
+
+  const year = htmlDocument.querySelector(
+    ".filmCoverSection__titleDetails > .filmCoverSection__year"
+  )?.textContent;
+
+  return {
+    Title: title.includes(",") ? `"${title}"` : title,
+    Year: year,
+  };
 }
 
 async function getAllRates() {
@@ -236,26 +120,22 @@ async function getAllRates() {
 
   const allRates = [];
 
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("height", 200);
-  iframe.setAttribute("width", 200);
-  document.body.appendChild(iframe);
-
   for (let i = 0; i <= expectedChildCount - 1; i++) {
     const movieLink = allMoviesElements[i].querySelector("a").href;
+
     try {
-      const dom = await getIframeDom(movieLink, iframe);
-      const parsedData = await parseDomToFilmData(dom);
-      allRates.push(parsedData);
+      const movieData = await getMovieData(movieLink);
+      if (!movieData) {
+        continue;
+      }
+
+      allRates.push(movieData);
     } catch (e) {
       console.log(e);
-      return;
+      return allRates;
     }
     console.log("pobrano " + (i + 1) + " z " + expectedChildCount);
   }
-
-  iframe.remove();
-
   return allRates;
 }
 
@@ -300,7 +180,7 @@ async function main() {
   let csvRates = arrayToCsv(allRates);
 
   for (let i = 0; i < csvRates.length; i++) {
-    download(`Filmweb2Letterboxd_watched_${i}.csv`, csvRates[i]);
+    download(`Filmweb2Letterboxd_watchlist_${i}.csv`, csvRates[i]);
   }
 }
 
