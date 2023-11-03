@@ -88,9 +88,10 @@ async function getMovieData(movieUrl) {
     )?.textContent;
   }
 
-  const year = htmlDocument.querySelector(
+  let year = htmlDocument.querySelector(
     ".filmCoverSection__titleDetails > .filmCoverSection__year"
   )?.textContent;
+  year = year.split(" - ")[0]; // handle serial dates
   const id = htmlDocument.querySelector("a[data-filmid]")?.dataset?.filmid;
 
   return {
@@ -102,8 +103,8 @@ async function getMovieData(movieUrl) {
   };
 }
 
-async function getRatingData(movieId) {
-  const movieUrl = `https://www.filmweb.pl/api/v1/logged/vote/film/${movieId}/details`;
+async function getRatingData(movieId, contentType) {
+  const movieUrl = `https://www.filmweb.pl/api/v1/logged/vote/${contentType}/${movieId}/details`;
   const ratingJSON = await fetch(movieUrl, {
     method: "GET",
     headers: {
@@ -132,6 +133,8 @@ async function getRatingData(movieId) {
 }
 
 async function getAllRates() {
+  const contentType = window.location.href.split("/").pop();
+
   const allMoviesContainer = document.querySelector(
     'div[data-group="userPage"]  section > div:nth-child(2)'
   );
@@ -161,7 +164,7 @@ async function getAllRates() {
       if (!id || !movieData) {
         continue;
       }
-      const ratingData = await getRatingData(id);
+      const ratingData = await getRatingData(id, contentType);
 
       allRates.push({ ...movieData, ...ratingData });
     } catch (e) {
