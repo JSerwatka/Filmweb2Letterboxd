@@ -1,127 +1,182 @@
-const monthMapper = {
-  stycznia: "01",
-  lutego: "02",
-  marca: "03",
-  kwietnia: "04",
-  maja: "05",
-  czerwca: "06",
-  lipca: "07",
-  sierpnia: "08",
-  września: "09",
-  października: "10",
-  listopada: "11",
-  grudnia: "12",
-};
-
-const mapDate = (date) => {
-  const [day, monthName, year] = date.split(" ");
-
-  if (!year || !monthName || !day) {
-    return "";
+function loadAllInfiniteScrollChildren(allMoviesContainer, expectedChildCount) {
+  function scrollToBottom() {
+    window.scrollTo(0, document.body.scrollHeight);
   }
 
-  return `${year}-${monthMapper[monthName]}-${day.padStart(2, "0")}`;
-};
-
-const parseDom = (dom) => {
-  const moviesNodes = dom.querySelectorAll("div.voteBoxes__box");
-  let arr = [];
-
-  try {
-    for (movie of moviesNodes) {
-      let title = movie.querySelector(
-        "div.preview__alternateTitle"
-      )?.textContent;
-      if (!title) {
-        title = movie.querySelector("h2.preview__title").textContent;
-      }
-
-      const year = movie.querySelector("div.preview__year").textContent;
-      const userVote = movie.querySelector("span.userRate__rate").textContent;
-      const voteDate = mapDate(
-        movie.querySelector(".voteCommentBox__date").textContent
-      );
-
-      arr.push({
-        Title: title.includes(",") ? `"${title}"` : title,
-        Year: year,
-        Rating10: userVote,
-        WatchedDate: voteDate,
-      });
+  return new Promise((resolve, reject) => {
+    if (!allMoviesContainer) {
+      reject("Błąd skryptu: Target element not found.");
+      return;
     }
 
-    return arr;
-  } catch (e) {
-    console.log("Wystąpił problem z parsowaniem strony " + e);
-    return [];
-  }
-};
+    if (!expectedChildCount) {
+      reject("Błąd skryptu: No children found");
+      return;
+    }
 
-const waitForCommentSectionToLoad = async (iframe, i) => {
-  return new Promise((resolve) => {
-    const waitForDateInterval = setInterval(() => {
-      const childDocument = (
-        iframe.contentDocument || iframe.contentWindow.document
-      ).documentElement;
-      const commentSections = childDocument.querySelectorAll(".voteCommentBox");
+    const currentChildCount = allMoviesContainer.children.length;
+    if (currentChildCount >= expectedChildCount) {
+      resolve(allMoviesContainer.children);
+    }
 
-      commentSections[i].scrollIntoView(false);
+    const checkAndScroll = (mutationsList) => {
+      for (const mutation of mutationsList) {
+        if (mutation.type === "childList") {
+          scrollToBottom();
+          const currentChildCount = allMoviesContainer.children.length;
 
-      if (
-        commentSections[i].querySelector(".voteCommentBox__date").textContent
-      ) {
-        clearInterval(waitForDateInterval);
-        resolve();
+          if (currentChildCount >= expectedChildCount) {
+            // All expected children are now visible, scrolling is done
+            observer.disconnect();
+            resolve(allMoviesContainer.children);
+          }
+        }
       }
-    }, 100);
+    };
+
+    const observer = new MutationObserver(checkAndScroll);
+
+    observer.observe(allMoviesContainer, { childList: true, subtree: true });
+
+    // Initialize creating new children
+    scrollToBottom();
   });
-};
+}
 
-const getIframeDom = async (url) => {
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("src", url);
-  iframe.setAttribute("height", 200);
-  iframe.setAttribute("width", 200);
-  document.body.appendChild(iframe);
+function formatDate(dateNumber) {
+  const dateStr = dateNumber.toString();
 
-  return new Promise((resolve) =>
-    iframe.addEventListener("load", async () => {
-      const childDocument = (
-        iframe.contentDocument || iframe.contentWindow.document
-      ).documentElement;
-      const commentSections = childDocument.querySelectorAll(".voteCommentBox");
+  const year = dateStr.substring(0, 4);
+  const month = dateStr.substring(4, 6);
+  const day = dateStr.substring(6, 8);
 
-      for (let i = 0; i < commentSections.length; i++) {
-        await waitForCommentSectionToLoad(iframe, i);
+  return `${year}-${month}-${day}`;
+}
+
+async function getMovieData(movieUrl) {
+  const parser = new DOMParser();
+
+  const DOMContent = await fetch(movieUrl, {
+    method: "GET",
+    headers: {
+      Cookie: document.cookie,
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Bład skryptu podczas ściągania danych filmu`);
       }
-
-      const dom = (iframe.contentDocument || iframe.contentWindow.document)
-        .documentElement;
-      iframe.remove();
-      resolve(dom);
+      return response.text();
     })
-  );
-};
+    .catch((error) => {
+      console.log(error);
+      return undefined;
+    });
 
-const getAllRates = async () => {
-  const ratesNum = Number(
-    document.querySelector(".blockHeader__titleInfoCount").textContent
-  );
-  const numOfPages = Math.ceil(ratesNum / 25);
-  const userFilmwebUrl = window.location.href;
-  let allRates = [];
-
-  console.log("Rozpoczynam pobieranie, cierpliwości...");
-  for (let i = 1; i <= numOfPages; i++) {
-    const dom = await getIframeDom(userFilmwebUrl + "?page=" + i);
-    allRates = allRates.concat(parseDom(dom));
-    console.log("pobrano " + Math.min(25 * i, ratesNum) + " z " + ratesNum);
+  if (!DOMContent) {
+    return undefined;
   }
 
-  return allRates;
-};
+  const htmlDocument = parser.parseFromString(DOMContent, "text/html");
 
-const download = (filename, text) => {
+  let title = htmlDocument.querySelector(
+    ".filmCoverSection__titleDetails > .filmCoverSection__originalTitle"
+  )?.textContent;
+  if (!title) {
+    title = htmlDocument.querySelector(
+      ".filmCoverSection__titleDetails > .filmCoverSection__title"
+    )?.textContent;
+  }
+
+  let year = htmlDocument.querySelector(
+    ".filmCoverSection__titleDetails > .filmCoverSection__year"
+  )?.textContent;
+  year = year.split(" - ")[0]; // handle serial dates
+  const movieId = htmlDocument.querySelector("[data-film-id]")?.dataset?.filmId;
+
+  return {
+    movieId,
+    movieData: {
+      Title: title.includes(",") ? `"${title}"` : title,
+      Year: year,
+    },
+  };
+}
+
+async function getRatingData(movieId, contentType) {
+  const movieUrl = `https://www.filmweb.pl/api/v1/logged/vote/${contentType}/${movieId}/details`;
+  const ratingJSON = await fetch(movieUrl, {
+    method: "GET",
+    headers: {
+      Cookie: document.cookie,
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Bład skryptu podczas ściągania oceny filmu`);
+      }
+      return response.json();
+    })
+    .catch((error) => {
+      console.log(error);
+      return undefined;
+    });
+
+  if (!ratingJSON) {
+    return undefined;
+  }
+
+  return {
+    WatchedDate: formatDate(ratingJSON.viewDate),
+    ...(ratingJSON.rate >= 1 && { Rating10: ratingJSON.rate }),
+  };
+}
+
+async function getAllRates() {
+  const contentType = window.location.href.split("/").pop();
+
+  const allMoviesContainer = document.querySelector(
+    'div[data-group="userPage"]  section > div:nth-child(2)'
+  );
+  const expectedChildCount = Number(
+    document.querySelector(
+      'div[data-group="userPage"] li > a.active[data-counter]'
+    ).dataset.counter ?? ""
+  );
+  let allMoviesElements;
+
+  try {
+    allMoviesElements = await loadAllInfiniteScrollChildren(
+      allMoviesContainer,
+      expectedChildCount
+    );
+  } catch (error) {
+    throw new Error(error);
+  }
+
+  const allRates = [];
+
+  for (let i = 0; i <= expectedChildCount - 1; i++) {
+    const movieLink = allMoviesElements[i].querySelector("a").href;
+
+    try {
+      const { movieId, movieData } = await getMovieData(movieLink);
+      if (!movieId || !movieData) {
+        continue;
+      }
+      const ratingData = await getRatingData(movieId, contentType);
+
+      allRates.push({ ...movieData, ...ratingData });
+    } catch (e) {
+      console.log(e);
+      return allRates;
+    }
+    console.log("pobrano " + (i + 1) + " z " + expectedChildCount);
+  }
+  return allRates;
+}
+
+function download(filename, text) {
   const element = document.createElement("a");
   element.setAttribute(
     "href",
@@ -134,9 +189,9 @@ const download = (filename, text) => {
   element.click();
 
   document.body.removeChild(element);
-};
+}
 
-const arrayToCsv = (allRates) => {
+function arrayToCsv(allRates) {
   let csvRates = Object.keys(allRates[0]).join(",") + "\n";
   let filesArray = [];
 
@@ -152,15 +207,18 @@ const arrayToCsv = (allRates) => {
   filesArray.push(csvRates);
 
   return filesArray;
-};
+}
 
-const main = async () => {
+async function main() {
+  console.log("Rozpoczynam pobieranie, cierpliwości...");
+  console.log("Proszę nie zamykać, przełączać, ani minimalizować tego okna!");
   let allRates = await getAllRates();
+  console.log("rozpoczynam ściąganie pliku csv");
   let csvRates = arrayToCsv(allRates);
 
   for (let i = 0; i < csvRates.length; i++) {
     download(`Filmweb2Letterboxd_watched_${i}.csv`, csvRates[i]);
   }
-};
+}
 
 main();
