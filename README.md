@@ -15,7 +15,7 @@ Pliku csv ma następujące kolumny:
 ### Pobranie obejrzanych filmów
 
 1. Zaloguj się do Filmweb'a.
-2. Przejdź do `https://www.filmweb.pl/user/<username>#/film`.
+2. Przejdź do `https://www.filmweb.pl/user/<username>#/votes/film`.
 3. Otwórz konsolę (_ctrl+shift+i_ -> _Console_).
 4. Wklej skrypt z pliku [watched.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/watched.js)
 5. Zostaw kartę otwartą i nie przełączaj na żadną inną!
@@ -31,7 +31,7 @@ Pliku csv ma następujące kolumny:
 ### Pobranie "Chcę zobaczyć"
 
 1. Zaloguj się do Filmweb'a.
-2. Przejdź do `https://www.filmweb.pl/user/<username>#/wantToSee`.
+2. Przejdź do `https://www.filmweb.pl/user/<username>#/wantToSee/film`.
 3. Otwórz konsolę (_ctrl+shift+i_ -> _Console_).
 4. Wklej skrypt z pliku [watchlist.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/watchlist.js)
 5. Zostaw kartę otwartą i nie przełączaj na żadną inną!
