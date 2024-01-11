@@ -20,6 +20,8 @@ Pliku csv ma następujące kolumny:
 4. Wklej skrypt z pliku [watched.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/watched.js)
 5. Zostaw kartę otwartą i nie przełączaj na żadną inną!
 
+Dalej masz wątpliwości, sprawdź ten komentarz: https://github.com/JSerwatka/Filmweb2Letterboxd/issues/8#issuecomment-1887372746.
+
 ### Pobranie obejrzanych seriali
 
 1. Zaloguj się do Filmweb'a.
