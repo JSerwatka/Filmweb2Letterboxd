@@ -1,6 +1,6 @@
 function loadAllInfiniteScrollChildren(allMoviesContainer, expectedChildCount) {
   function scrollToBottom() {
-    window.scrollTo(0, document.body.scrollHeight);
+    window.scrollTo({ top: document.body.scrollHeight });
   }
 
   return new Promise((resolve, reject) => {
@@ -26,6 +26,7 @@ function loadAllInfiniteScrollChildren(allMoviesContainer, expectedChildCount) {
           const currentChildCount = allMoviesContainer.children.length;
 
           if (currentChildCount >= expectedChildCount) {
+            scrollToBottom();
             // All expected children are now visible, scrolling is done
             observer.disconnect();
             resolve(allMoviesContainer.children);
@@ -43,8 +44,61 @@ function loadAllInfiniteScrollChildren(allMoviesContainer, expectedChildCount) {
   });
 }
 
+function forceAllDataLoaded(allMoviesContainer, expectedChildCount) {
+  function checkIfAllElementsLoaded() {
+    let allChildrenLoaded = Array.from(allMoviesContainer.children).every((child => {
+      if (child.classList.length == 0 || child.classList.contains("hide")) {
+        return true
+      }
+      return child.querySelector("[data-btn-center-sel=poster]")
+    }))
+    const currentChildCount = allMoviesContainer.children.length;
+    console.log({ allChildrenLoaded, test2: currentChildCount >= expectedChildCount });
+    if (currentChildCount >= expectedChildCount && allChildrenLoaded) {
+      return true
+    }
+    return false
+  }
+
+
+  let currentDirection = "top"
+  const scrollAmount = 200
+
+
+  const observer = new MutationObserver((mutationsList, observer) => {
+    for (let mutation of mutationsList) {
+      if (checkIfAllElementsLoaded()) {
+        observer.disconnect()
+        return true
+      }
+    }
+  });
+
+  observer.observe(allMoviesContainer, { childList: true, subtree: true });
+
+  setInterval(() => {
+    window.scrollBy(0, currentDirection === "top" ? -scrollAmount : scrollAmount);
+    console.log({
+      currentDirection,
+      scrollY: window.scrollY,
+      scrollYBottom: window.innerHeight + window.scrollY,
+      officialBottom: document.body.offsetHeight
+    });
+    if (window.scrollY <= 10 && currentDirection === "top") {
+      currentDirection = "bottom";
+    } else if (((window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 10)) && currentDirection === "bottom") {
+      currentDirection = "top";
+    }
+
+  }, 200);
+}
+
+
 function formatDate(dateNumber) {
-  const dateStr = dateNumber.toString();
+  const dateStr = dateNumber?.toString();
+  if (!dateStr) {
+    return `2000-01-01`
+  }
 
   const year = dateStr.substring(0, 4);
   const month = dateStr.substring(4, 6);
@@ -134,32 +188,34 @@ async function getRatingData(movieId, contentType) {
 
 async function getAllRates() {
   const contentType = window.location.href.split("/").pop();
-
-  const allMoviesContainer = document.querySelector(
-    'div[data-group="userPage"]  section > div:nth-child(2)'
-  );
+  const allMoviesContainer = document.querySelector('div[data-group="userPage"]  section > div:nth-child(2)');
   const expectedChildCount = Number(
     document.querySelector(
       'div[data-group="userPage"] li > a.active[data-counter]'
     ).dataset.counter ?? ""
   );
   let allMoviesElements;
-
   try {
-    allMoviesElements = await loadAllInfiniteScrollChildren(
+    await loadAllInfiniteScrollChildren(
       allMoviesContainer,
       expectedChildCount
     );
+    forceAllDataLoaded(allMoviesContainer, expectedChildCount)
   } catch (error) {
     throw new Error(error);
   }
-
   const allRates = [];
 
   for (let i = 0; i <= expectedChildCount - 1; i++) {
-    const movieLink = allMoviesElements[i].querySelector("a").href;
+    const movieLink = allMoviesElements[i].querySelector("[data-btn-center-sel=poster]")?.href;
 
     try {
+      if (!movieLink) {
+        console.log("HTML: ", allMoviesElements[i]);
+        console.log("index: ", i);
+        throw Error("Nie znaleziono filmu");
+      }
+
       const { movieId, movieData } = await getMovieData(movieLink);
       if (!movieId || !movieData) {
         continue;
