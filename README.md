@@ -24,7 +24,7 @@ Pliku csv ma następujące kolumny:
     - Dla seriali: [watched_serial.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/watched_serial.js)
 5. Zostaw kartę otwartą i nie przełączaj na żadną inną!
 
-Dalej masz wątpliwości, sprawdź ten komentarz: #8 (comment).
+Dalej masz wątpliwości, sprawdź ten komentarz: https://github.com/JSerwatka/Filmweb2Letterboxd/issues/8#issuecomment-1887372746.
 
 ### Pobranie "Chcę zobaczyć" 
 
