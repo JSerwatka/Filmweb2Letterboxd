@@ -21,10 +21,7 @@ async function fetchApi(endpoint) {
     })
         .then((response) => {
             if (!response.ok) {
-                throw Error(`Błąd skryptu podczas fetchowania`, {
-                    endpoint,
-                    response: JSON.stringify(response)
-                })
+                throw Error(`Błąd skryptu podczas fetchowania, endpoint: ${endpoint}, reponse: ${JSON.stringify(response)}`)
             }
             return response.json()
         })
