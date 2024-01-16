@@ -15,7 +15,7 @@ Pliku csv ma następujące kolumny:
 ### Pobranie obejrzanych filmów lub seriali
 
 1. Zaloguj się do Filmweb'a.
-2. Przejdź do `https://www.filmweb.pl/user/<username>#`.
+2. Przejdź do `https://www.filmweb.pl/user/<username>`.
 3. Otwórz konsolę
        ![image](https://github.com/JSerwatka/Filmweb2Letterboxd/assets/33938646/2b4ce2e1-0556-4fbd-b29c-1cb957918ca4)
 
