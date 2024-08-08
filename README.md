@@ -64,3 +64,8 @@ Zaloguj się, a następnie:
 
 - Z powodu ograniczenia rozmiaru pliku, narzuconego przez importer Letterboxd, skrypt dzieli obejrzane filmy/seriale na kilka plików (max 1800 wierszy).
 - Częste zmiany na stronie Filmweb'u powodują, że skrypty i API szybko stają się nieaktualne. Gdyby tak się stało, można śmiało zgłaszać swoje _PR_ lub _Issues_.
+
+## Letterboxd Tweaks
+Stworzyłem również rozszerzenie do przeglądarek opartych na Chromium (Chrome, Edge, Brave), które znacząco podnosi komfort korzystania z serwisu Letterboxd. 
+- Rozszerzenie jest dostępne [tutaj](https://chromewebstore.google.com/detail/letterboxd-tweaks/hopfbphfhmjgdnedoldfpbhepohibfkj)
+- Kod projektu znajduje się w [tym repo](https://github.com/JSerwatka/letterboxd-tweaks)
