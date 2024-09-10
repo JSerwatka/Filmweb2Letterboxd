@@ -36,7 +36,7 @@ async function getAllRates(resourceType) {
         const tvseriesJSON = await fetchApi(`logged/want2see?entityName=tvshow`)
         dataJSON.push(...tvseriesJSON)
     }
-    const allSavedIds = dataJSON.map((entry) => entry[0])
+    const allSavedIds = dataJSON.filter((entry) => entry[1] > 0).map((entry) => entry[0])
 
     for (let i = 0; i < allSavedIds.length; i++) {
         // get title, year
