@@ -1,5 +1,7 @@
 # Filmweb2Letterboxd
 <a href="https://buycoffee.to/jserwatka" target="_blank"><img src="https://buycoffee.to/btn/buycoffeeto-btn-primary.svg" style="width: 169px" alt="Postaw mi kawę na buycoffee.to"></a>
+
+Sprawdź też [Letterboxd Tweaks](https://chromewebstore.google.com/detail/letterboxd-tweaks/hopfbphfhmjgdnedoldfpbhepohibfkj)
 ## O projekcie
 
 Skrypty eksportują oceny filmów/seriali i "Chcę zobaczyć" z Filmweb'u do formatu csv.
