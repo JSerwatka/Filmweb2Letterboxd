@@ -67,16 +67,21 @@ async function getAllRates(resourceType) {
       throw Error(`Film nie znaleziony: ${JSON.stringify(vote)}`)
     }
     // get title, year
-    const restOfData = await fetchApi(`title/${id}/info`);
-    const title = restOfData["originalTitle"] ? restOfData["originalTitle"] : restOfData["title"]
-    allData.push({
-      Title: title.includes(",") ? `"${title}"` : title,
-      Year: restOfData.year,
-      WatchedDate: formatDate(vote.viewDate),
-      Rating10: vote.rate > 0 ? vote.rate : null
-    })
+    try {
+      const restOfData = await fetchApi(`title/${id}/info`);
+      const title = restOfData["originalTitle"] ? restOfData["originalTitle"] : restOfData["title"]
+      allData.push({
+        Title: title.includes(",") ? `"${title}"` : title,
+        Year: restOfData.year,
+        WatchedDate: formatDate(vote.viewDate),
+        Rating10: vote.rate > 0 ? vote.rate : null
+      })
 
-    console.log("pobrano " + (i + 1))
+      console.log("pobrano " + (i + 1))
+    } catch(e) {
+      console.log("Nie udało się pobrać " + (i + 1))
+      console.log(e)
+    }
   }
 
   return allData;

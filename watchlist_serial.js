@@ -40,14 +40,19 @@ async function getAllRates(resourceType) {
 
     for (let i = 0; i < allSavedIds.length; i++) {
         // get title, year
-        const restOfData = await fetchApi(`title/${allSavedIds[i]}/info`);
-        const title = restOfData["originalTitle"] ? restOfData["originalTitle"] : restOfData["title"]
-        allData.push({
-            Title: title.includes(",") ? `"${title}"` : title,
-            Year: restOfData.year,
-        })
+        try {
+            const restOfData = await fetchApi(`title/${allSavedIds[i]}/info`);
+            const title = restOfData["originalTitle"] ? restOfData["originalTitle"] : restOfData["title"]
+            allData.push({
+                Title: title.includes(",") ? `"${title}"` : title,
+                Year: restOfData.year,
+            })
 
-        console.log("pobrano " + (i + 1))
+            console.log("pobrano " + (i + 1))
+        } catch(e) {
+            console.log("Nie udało się pobrać " + (i + 1))
+            console.log(e)
+        }
     }
 
     return allData;
