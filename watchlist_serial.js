@@ -39,15 +39,19 @@ async function getAllRates(resourceType) {
     const allSavedIds = dataJSON.filter((entry) => entry[1] > 0).map((entry) => entry[0])
 
     for (let i = 0; i < allSavedIds.length; i++) {
-        // get title, year
-        const restOfData = await fetchApi(`title/${allSavedIds[i]}/info`);
-        const title = restOfData["originalTitle"] ? restOfData["originalTitle"] : restOfData["title"]
-        allData.push({
-            Title: title.includes(",") ? `"${title}"` : title,
-            Year: restOfData.year,
-        })
+        try {
+            // get title, year
+            const restOfData = await fetchApi(`title/${allSavedIds[i]}/info`);
+            const title = restOfData["originalTitle"] ? restOfData["originalTitle"] : restOfData["title"]
+            allData.push({
+                Title: title.includes(",") ? `"${title}"` : title,
+                Year: restOfData.year,
+            })
 
-        console.log("pobrano " + (i + 1))
+            console.log("pobrano " + (i + 1))
+        } catch (e) {
+            console.warn(e)
+        }
     }
 
     return allData;

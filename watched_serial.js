@@ -47,7 +47,7 @@ async function getAllRates(resourceType) {
 
   if (resourceType === "serial") {
     nextPage = 1
-    
+
     while (true) {
       const tvseriesJSON = await fetchApi(`logged/vote/title/tvshow?page=${nextPage}`)
       if (tvseriesJSON.length == 0) {
@@ -63,20 +63,25 @@ async function getAllRates(resourceType) {
     const vote = allVotes[i]
 
     const id = vote["entity"];
-    if (!id) {
-      throw Error(`Film nie znaleziony: ${JSON.stringify(vote)}`)
-    }
-    // get title, year
-    const restOfData = await fetchApi(`title/${id}/info`);
-    const title = restOfData["originalTitle"] ? restOfData["originalTitle"] : restOfData["title"]
-    allData.push({
-      Title: title.includes(",") ? `"${title}"` : title,
-      Year: restOfData.year,
-      WatchedDate: formatDate(vote.viewDate),
-      Rating10: vote.rate > 0 ? vote.rate : null
-    })
 
-    console.log("pobrano " + (i + 1))
+    try {
+      if (!id) {
+        throw Error(`Film nie znaleziony: ${JSON.stringify(vote)}`)
+      }
+      // get title, year
+      const restOfData = await fetchApi(`title/${id}/info`);
+      const title = restOfData["originalTitle"] ? restOfData["originalTitle"] : restOfData["title"]
+      allData.push({
+        Title: title.includes(",") ? `"${title}"` : title,
+        Year: restOfData.year,
+        WatchedDate: formatDate(vote.viewDate),
+        Rating10: vote.rate > 0 ? vote.rate : null
+      })
+
+      console.log("pobrano " + (i + 1))
+    } catch (e) {
+      console.warn(e)
+    }
   }
 
   return allData;
