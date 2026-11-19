@@ -17,14 +17,14 @@ Pliki "Chcę zobaczyć" mają tylko kolumny _Title_ i _Year_.
 ## Jak używać
 
 1. Zaloguj się do Filmweb'a.
-2. Przejdź do `https://www.filmweb.pl/user/<username>`.
+2. W tej samej karcie otwórz `https://www.filmweb.pl/robots.txt`. To prosta strona, która nie przeładuje się w trakcie eksportu, w przeciwieństwie do zwykłych stron Filmweb'u.
 3. Otwórz konsolę
        ![image](https://github.com/JSerwatka/Filmweb2Letterboxd/assets/33938646/2b4ce2e1-0556-4fbd-b29c-1cb957918ca4)
 
     - Windows: `Ctrl + Shift + J`
     - Mac: `Cmd + Option + J`
 4. Wklej cały skrypt z pliku [filmweb2letterboxd.js](https://github.com/JSerwatka/Filmweb2Letterboxd/blob/master/filmweb2letterboxd.js) i naciśnij Enter.
-5. Zostaw kartę otwartą i nie przełączaj na żadną inną!
+5. Zostaw kartę otwartą i nie przełączaj na żadną inną! Okno przeglądarki musi być **widoczne**: nie minimalizuj go i nie zasłaniaj innymi oknami (może być mniejsze, z boku ekranu).
 6. Gdy przeglądarka zapyta, czy zezwolić stronie na pobranie wielu plików – zezwól.
 
 Domyślnie skrypt pobiera wszystko naraz: obejrzane filmy, obejrzane seriale oraz "Chcę zobaczyć" dla filmów i seriali. Jeśli potrzebujesz tylko części, zmień na początku skryptu listę `exports` w sekcji `KONFIGURACJA`, np.:
@@ -72,7 +72,9 @@ Zaloguj się, a następnie:
 
 - Z powodu ograniczenia rozmiaru pliku, narzuconego przez importer Letterboxd, skrypt dzieli dane na kilka plików (max 1800 wierszy). Pliki są zapisywane z krótkimi odstępami – jeśli przeglądarka zablokowała pobieranie wielu plików, zezwól na nie w ustawieniach witryny (ikona w pasku adresu) i uruchom skrypt ponownie.
 - Skrypt celowo robi losowe przerwy między zapytaniami (oraz co jakiś czas dłuższą pauzę), żeby nie obciążać Filmweb'u i nie zostać potraktowanym jak bot. Gdy serwer odpowiada błędem przeciążenia (429/5xx), skrypt zwalnia i ponawia zapytanie. Dlatego duże kolekcje (kilka tysięcy ocen) mogą się pobierać kilkadziesiąt minut – w konsoli widać postęp i szacowany pozostały czas. Tempo można zmienić w sekcji `KONFIGURACJA`.
-- Jeśli przełączysz kartę, przeglądarka może bardzo spowolnić skrypt – dlatego zostaw ją na wierzchu.
+- Jeśli karta jest ukryta (przełączona, zminimalizowana albo całkiem zasłonięta innym oknem), przeglądarka budzi skrypt najwyżej raz na sekundę, a po 5 minutach nawet raz na minutę. Eksport wtedy praktycznie staje. Skrypt wypisuje ostrzeżenie, gdy wykryje takie spowolnienie.
+- Gdy przez dłuższy czas nic się nie dzieje, skrypt co 30 s wypisuje, na co czeka (np. na odpowiedź Filmweb'u albo przerwę).
+- Filmweb trzyma logowanie w krótko ważnym tokenie. Gdy w trakcie długiego eksportu token wygaśnie, skrypt sam odnawia sesję, wczytując stronę główną, i kontynuuje.
 - Jeśli skrypt zostanie przerwany (np. wylogowanie), zapisze dane pobrane do tego momentu i wyświetli komunikat.
 - Lista ocen i pobrane tytuły są zapamiętywane w przeglądarce (`localStorage`). Jeśli skrypt się przerwie albo zamkniesz kartę, po ponownym uruchomieniu nie przechodzi ponownie stron ocen i pobiera tylko brakujące tytuły. Po udanym przebiegu pamięć jest czyszczona. Jeśli w międzyczasie oceniłeś nowe filmy i chcesz zacząć od zera, skrypt wypisze w konsoli polecenie czyszczące pamięć.
 - Jeśli Filmweb nie odpowie na zapytanie w ciągu 30 s, skrypt je przerywa, zwalnia i ponawia, zamiast czekać w nieskończoność.

@@ -68,6 +68,32 @@
     return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
   }
 
+  // ---------- stan i kontrola "czy skrypt żyje" ----------
+
+  // Co skrypt robi w tej chwili – wypisywane przez strażnika, gdy przez dłuższy czas nic się nie dzieje.
+  const activity = { state: "start", since: Date.now() };
+  const setActivity = (state) => {
+    activity.state = state;
+    activity.since = Date.now();
+  };
+
+  // Przerwa, która wykrywa spowolnienie przez przeglądarkę. Chrome w ukrytej karcie (inna karta,
+  // zminimalizowane albo przykryte okno) budzi timery raz na sekundę, a po 5 min nawet raz na minutę
+  // (developer.chrome.com/blog/timer-throttling-in-chrome-88).
+  async function pause(ms, label) {
+    setActivity(label);
+    const startedAt = Date.now();
+    await sleep(ms);
+    const overdue = Date.now() - startedAt - ms;
+    if (overdue > 10000) {
+      console.warn(
+        `Przeglądarka spowolniła skrypt: przerwa trwała ${Math.round((ms + overdue) / 1000)} s zamiast ` +
+          `${Math.round(ms / 1000)} s. Okno Chrome z tą kartą musi być widoczne – nie minimalizuj go ` +
+          `i nie zasłaniaj innymi oknami (może być mniejsze, z boku ekranu).`
+      );
+    }
+  }
+
   // ---------- ograniczanie tempa zapytań ----------
 
   const throttle = {
@@ -83,12 +109,12 @@
       if (this.requestCount >= this.nextLongPauseAt) {
         this.nextLongPauseAt =
           this.requestCount + randomBetween(CONFIG.longPauseEveryMin, CONFIG.longPauseEveryMax);
-        const pause = randomBetween(CONFIG.longPauseMinMs, CONFIG.longPauseMaxMs) * this.slowdown;
-        console.log(`Krótka przerwa (${Math.round(pause / 1000)} s)…`);
-        await sleep(pause);
+        const ms = randomBetween(CONFIG.longPauseMinMs, CONFIG.longPauseMaxMs) * this.slowdown;
+        console.log(`Krótka przerwa (${Math.round(ms / 1000)} s)…`);
+        await pause(ms, "dłuższa przerwa między zapytaniami");
         return;
       }
-      await sleep(randomBetween(CONFIG.delayMinMs, CONFIG.delayMaxMs) * this.slowdown);
+      await pause(randomBetween(CONFIG.delayMinMs, CONFIG.delayMaxMs) * this.slowdown, "przerwa przed zapytaniem");
     },
 
     onSuccess() {
@@ -109,9 +135,30 @@
     return CONFIG.retryBaseDelayMs * 3 ** attempt + randomBetween(0, 2000);
   }
 
+  // Filmweb trzyma logowanie w krótko ważnym tokenie (ciasteczko HttpOnly), który odświeża przy
+  // wczytaniu dowolnej strony HTML. Długi eksport przekracza ten czas i API zaczyna zwracać 401/403.
+  // Wczytanie strony głównej (zwykłe GET) odnawia token. Ustalone w projekcie Kinoskop, 2026-11-19.
+  async function renewSession() {
+    setActivity("odnawiam sesję Filmwebu");
+    console.log("Sesja Filmwebu wygasła – odnawiam…");
+    await pause(randomBetween(CONFIG.delayMinMs, CONFIG.delayMaxMs), "przerwa przed odnowieniem sesji");
+    try {
+      await fetch("/", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "text/html" },
+        signal: AbortSignal.timeout(CONFIG.requestTimeoutMs),
+      });
+    } catch (e) {
+      // Nieudane odnowienie – kolejne 401/403 przerwie skrypt z czytelnym komunikatem.
+    }
+  }
+
   async function fetchApi(endpoint) {
+    let sessionRenewed = false;
     for (let attempt = 0; ; attempt++) {
       await throttle.beforeRequest();
+      setActivity(`czekam na odpowiedź Filmwebu (${endpoint})`);
 
       // Timeout obejmuje zarówno nawiązanie połączenia, jak i odczyt treści odpowiedzi.
       const controller = new AbortController();
@@ -143,7 +190,7 @@
         }
         const wait = retryDelayMs(attempt);
         console.warn(`${reason[0].toUpperCase()}${reason.slice(1)}, ponawiam za ${Math.round(wait / 1000)} s… (${endpoint})`);
-        await sleep(wait);
+        await pause(wait, `czekam na ponowienie po błędzie (${endpoint})`);
         continue;
       } finally {
         clearTimeout(timer);
@@ -155,10 +202,16 @@
       }
 
       if (response.status === 401 || response.status === 403) {
+        if (!sessionRenewed) {
+          sessionRenewed = true;
+          await renewSession();
+          attempt--; // odnowienie sesji nie zużywa próby
+          continue;
+        }
         throw new FatalError(
-          `Filmweb odmówił dostępu (HTTP ${response.status}). Upewnij się, że jesteś zalogowany ` +
-            `i uruchamiasz skrypt na www.filmweb.pl. Jeśli jesteś zalogowany, Filmweb mógł tymczasowo ` +
-            `ograniczyć dostęp – odczekaj kilkanaście minut i spróbuj ponownie.`
+          `Filmweb odmówił dostępu (HTTP ${response.status}) także po odnowieniu sesji. Upewnij się, ` +
+            `że jesteś zalogowany na www.filmweb.pl. Jeśli jesteś zalogowany, Filmweb mógł tymczasowo ` +
+            `ograniczyć dostęp – odczekaj kilkanaście minut i uruchom skrypt ponownie (postęp zostanie wznowiony).`
         );
       }
 
@@ -168,7 +221,7 @@
         console.warn(
           `HTTP ${response.status} – zwalniam i ponawiam za ${Math.round(wait / 1000)} s… (${endpoint})`
         );
-        await sleep(wait);
+        await pause(wait, `czekam na ponowienie po HTTP ${response.status} (${endpoint})`);
         continue;
       }
 
@@ -443,15 +496,42 @@
   const onVisibilityChange = () => {
     if (document.hidden) {
       console.warn(
-        "Karta jest w tle – przeglądarka może mocno spowolnić skrypt. Wróć na tę kartę i zostaw ją otwartą."
+        "Karta jest ukryta (inna karta, zminimalizowane lub zasłonięte okno) – przeglądarka mocno spowolni skrypt. " +
+          "Wróć na tę kartę i zostaw okno widoczne."
       );
     }
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
 
+  // Ostrzeżenie przy próbie przeładowania lub zamknięcia karty w trakcie eksportu
+  // (strona główna Filmwebu potrafi się sama przeładować i przerwać skrypt).
+  const onBeforeUnload = (e) => {
+    e.preventDefault();
+    e.returnValue = "";
+  };
+  window.addEventListener("beforeunload", onBeforeUnload);
+
+  // Strażnik: jeśli od 45 s nic się nie zmieniło, wypisuje, na co skrypt czeka.
+  const watchdog = setInterval(() => {
+    const idleSec = Math.round((Date.now() - activity.since) / 1000);
+    if (idleSec >= 45) {
+      console.warn(
+        `Skrypt działa – stan: ${activity.state} (od ${idleSec} s)` +
+          (document.hidden ? ". Karta jest UKRYTA – przeglądarka spowalnia skrypt, pokaż okno z tą kartą." : ".")
+      );
+    }
+  }, 30000);
+
+  if (location.pathname !== "/robots.txt") {
+    console.warn(
+      "Wskazówka: najpewniej działa na https://www.filmweb.pl/robots.txt – zwykłe strony Filmwebu potrafią " +
+        "się same przeładować i przerwać skrypt."
+    );
+  }
+
   loadCache();
   console.log("Rozpoczynam pobieranie, cierpliwości…");
-  console.log("Proszę nie zamykać, przełączać, ani minimalizować tego okna!");
+  console.log("Nie zamykaj ani nie przeładowuj tej karty. Okno Chrome musi być widoczne – nie minimalizuj go i nie zasłaniaj innymi oknami!");
   console.log(
     "Skrypt celowo robi przerwy między zapytaniami, żeby nie obciążać Filmwebu – duże kolekcje mogą zająć kilkadziesiąt minut."
   );
@@ -520,6 +600,9 @@
   }
 
   document.removeEventListener("visibilitychange", onVisibilityChange);
+  window.removeEventListener("beforeunload", onBeforeUnload);
+  clearInterval(watchdog);
+  setActivity("zapisywanie plików");
 
   const complete = !fatal && allFailures.length === 0;
   if (complete) {
