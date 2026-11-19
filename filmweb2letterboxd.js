@@ -212,6 +212,7 @@
   function clearCache() {
     try {
       localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(LISTS_KEY);
     } catch (e) {}
   }
 
@@ -295,45 +296,84 @@
     return info.originalTitle || info.title;
   }
 
-  async function collectWatched(definition) {
-    const votes = [];
-    for (const voteType of definition.voteTypes) {
-      votes.push(...(await getAllVotes(voteType)));
-    }
+  // Etap 1: lista pozycji bez tytułów (ID Filmwebu + ocena + data obejrzenia).
+  // Zapamiętywana w localStorage, więc po przerwaniu nie trzeba ponownie przechodzić stron ocen.
+  const LISTS_KEY = "Filmweb2Letterboxd_lists";
 
-    const items = votes.map((vote) => ({ id: vote.entity, vote }));
-    return buildRows(
-      items,
-      async ({ id, vote }) => {
-        if (!id) {
-          throw new Error(`Brak ID tytułu w ocenie: ${JSON.stringify(vote)}`);
-        }
-        const info = await getTitleInfo(id);
-        return {
-          Title: titleFromInfo(info),
-          Year: info.year,
-          Rating10: vote.rate > 0 ? vote.rate : "",
-          WatchedDate: formatDate(vote.viewDate),
-        };
-      },
-      definition.label
-    );
+  function loadSavedLists() {
+    if (!CONFIG.persistCache) {
+      return {};
+    }
+    try {
+      return JSON.parse(localStorage.getItem(LISTS_KEY) || "{}");
+    } catch (e) {
+      return {};
+    }
   }
 
-  async function collectWatchlist(definition) {
-    const ids = [];
-    for (const entityName of definition.entityNames) {
-      ids.push(...(await getWatchlistIds(entityName)));
+  function saveList(exportName, items) {
+    if (!CONFIG.persistCache) {
+      return;
+    }
+    try {
+      const lists = loadSavedLists();
+      lists[exportName] = items;
+      localStorage.setItem(LISTS_KEY, JSON.stringify(lists));
+    } catch (e) {}
+  }
+
+  async function listItems(exportName, definition) {
+    const saved = loadSavedLists()[exportName];
+    if (Array.isArray(saved)) {
+      console.log(
+        `Wznawiam: lista "${definition.label}" (${saved.length} pozycji) z poprzedniego uruchomienia – pomijam pobieranie stron.`
+      );
+      return { items: saved, fromCache: true };
     }
 
-    return buildRows(
-      ids.map((id) => ({ id })),
-      async ({ id }) => {
-        const info = await getTitleInfo(id);
-        return { Title: titleFromInfo(info), Year: info.year };
-      },
-      definition.label
-    );
+    const items = [];
+    if (definition.kind === "watched") {
+      for (const voteType of definition.voteTypes) {
+        const votes = await getAllVotes(voteType);
+        items.push(...votes.map((vote) => ({ id: vote.entity, rate: vote.rate, viewDate: vote.viewDate })));
+      }
+    } else {
+      for (const entityName of definition.entityNames) {
+        items.push(...(await getWatchlistIds(entityName)).map((id) => ({ id })));
+      }
+    }
+
+    saveList(exportName, items);
+    return { items, fromCache: false };
+  }
+
+  function intermediateCsv(definition, items) {
+    if (definition.kind === "watched") {
+      const rows = items.map((item) => ({
+        FilmwebID: item.id,
+        Rating10: item.rate > 0 ? item.rate : "",
+        WatchedDate: formatDate(item.viewDate),
+      }));
+      return rowsToCsv(rows, ["FilmwebID", "Rating10", "WatchedDate"]);
+    }
+    return rowsToCsv(items.map((item) => ({ FilmwebID: item.id })), ["FilmwebID"]);
+  }
+
+  // Etap 2: dociągnięcie tytułu i roku dla każdej pozycji.
+  async function itemToRow(definition, item) {
+    if (!item.id) {
+      throw new Error(`Brak ID tytułu w pozycji: ${JSON.stringify(item)}`);
+    }
+    const info = await getTitleInfo(item.id);
+    if (definition.kind === "watched") {
+      return {
+        Title: titleFromInfo(info),
+        Year: info.year,
+        Rating10: item.rate > 0 ? item.rate : "",
+        WatchedDate: formatDate(item.viewDate),
+      };
+    }
+    return { Title: titleFromInfo(info), Year: info.year };
   }
 
   // ---------- CSV i pobieranie plików ----------
@@ -350,18 +390,18 @@
     return str;
   }
 
+  function rowsToCsv(rows, columns) {
+    const lines = rows.map((row) => columns.map((column) => csvField(row[column])).join(","));
+    return [columns.join(","), ...lines].join("\n") + "\n";
+  }
+
+  // Dzieli na pliki o maks. CONFIG.maxRowsPerFile wierszach (z nagłówkiem) – limit importera Letterboxd.
   function rowsToCsvFiles(rows, columns) {
-    const header = columns.join(",");
     const rowsPerFile = CONFIG.maxRowsPerFile - 1; // miejsce na nagłówek
     const files = [];
-
     for (let start = 0; start < rows.length; start += rowsPerFile) {
-      const lines = rows
-        .slice(start, start + rowsPerFile)
-        .map((row) => columns.map((column) => csvField(row[column])).join(","));
-      files.push([header, ...lines].join("\n") + "\n");
+      files.push(rowsToCsv(rows.slice(start, start + rowsPerFile), columns));
     }
-
     return files;
   }
 
@@ -425,12 +465,18 @@
     const definition = EXPORT_DEFINITIONS[exportName];
     console.log(`=== ${definition.label} ===`);
 
-    let result;
+    // Etap 1: lista bez tytułów -> od razu plik wstępny, żeby dane były bezpieczne,
+    // zanim zacznie się długie dociąganie tytułów.
+    let items;
     try {
-      result =
-        definition.kind === "watched"
-          ? await collectWatched(definition)
-          : await collectWatchlist(definition);
+      const listed = await listItems(exportName, definition);
+      items = listed.items;
+      if (items.length > 0 && !listed.fromCache) {
+        await downloadAll([
+          { name: `Filmweb2Letterboxd_${exportName}_wstepny.csv`, content: intermediateCsv(definition, items) },
+        ]);
+        console.log(`Plik wstępny (bez tytułów, ${items.length} pozycji) zapisany. Dociągam tytuły…`);
+      }
     } catch (e) {
       if (e instanceof FatalError) {
         fatal = e;
@@ -441,7 +487,12 @@
       continue;
     }
 
-    const { rows, failures, aborted } = result;
+    // Etap 2: tytuły i lata.
+    const { rows, failures, aborted } = await buildRows(
+      items,
+      (item) => itemToRow(definition, item),
+      definition.label
+    );
     allFailures.push(...failures);
     summary.push({ eksport: definition.label, zapisane: rows.length, nieudane: failures.length });
 
@@ -464,7 +515,7 @@
   if (allFailures.length > 0) {
     files.push({
       name: "Filmweb2Letterboxd_bledy.csv",
-      content: rowsToCsvFiles(allFailures, ["export", "id", "error"]).join(""),
+      content: rowsToCsv(allFailures, ["export", "id", "error"]),
     });
   }
 
@@ -495,8 +546,8 @@
   }
   if (!complete && CONFIG.persistCache) {
     console.log(
-      "Pobrane tytuły zostały zapamiętane – po ponownym uruchomieniu skrypt pobierze tylko brakujące. " +
-        `Aby wyczyścić pamięć: localStorage.removeItem("${CACHE_KEY}")`
+      "Pobrane listy i tytuły zostały zapamiętane – po ponownym uruchomieniu skrypt pobierze tylko brakujące. " +
+        `Aby zacząć od zera: localStorage.removeItem("${CACHE_KEY}"); localStorage.removeItem("${LISTS_KEY}")`
     );
   }
 })();

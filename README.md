@@ -35,8 +35,14 @@ exports: ["watched_film"],
 
 Dostępne wartości: `watched_film`, `watched_serial`, `watchlist_film`, `watchlist_serial`.
 
+Skrypt działa w dwóch etapach dla każdego eksportu:
+
+1. Pobiera listę ocen (lub "Chcę zobaczyć") i od razu zapisuje **plik wstępny** `Filmweb2Letterboxd_<eksport>_wstepny.csv` z kolumnami _FilmwebID_, _Rating10_, _WatchedDate_ (dla "Chcę zobaczyć" tylko _FilmwebID_). Ten plik nie nadaje się do importu do Letterboxd, ale zabezpiecza Twoje oceny, zanim zacznie się długie dociąganie tytułów.
+2. Dla każdej pozycji dociąga tytuł i rok, a potem zapisuje pliki docelowe.
+
 Pobrane pliki:
 
+- `Filmweb2Letterboxd_<eksport>_wstepny.csv` – plik wstępny (bez tytułów), kopia zapasowa;
 - `Filmweb2Letterboxd_<eksport>_<numer>.csv` – dane do importu;
 - `Filmweb2Letterboxd_bledy.csv` – tylko jeśli jakichś tytułów nie udało się pobrać (ID tytułu i przyczyna).
 
@@ -68,7 +74,7 @@ Zaloguj się, a następnie:
 - Skrypt celowo robi losowe przerwy między zapytaniami (oraz co jakiś czas dłuższą pauzę), żeby nie obciążać Filmweb'u i nie zostać potraktowanym jak bot. Gdy serwer odpowiada błędem przeciążenia (429/5xx), skrypt zwalnia i ponawia zapytanie. Dlatego duże kolekcje (kilka tysięcy ocen) mogą się pobierać kilkadziesiąt minut – w konsoli widać postęp i szacowany pozostały czas. Tempo można zmienić w sekcji `KONFIGURACJA`.
 - Jeśli przełączysz kartę, przeglądarka może bardzo spowolnić skrypt – dlatego zostaw ją na wierzchu.
 - Jeśli skrypt zostanie przerwany (np. wylogowanie), zapisze dane pobrane do tego momentu i wyświetli komunikat.
-- Pobrane tytuły są zapamiętywane w przeglądarce (`localStorage`). Jeśli skrypt się przerwie albo zamkniesz kartę, po ponownym uruchomieniu pobierze tylko brakujące tytuły. Po udanym przebiegu pamięć jest czyszczona.
+- Lista ocen i pobrane tytuły są zapamiętywane w przeglądarce (`localStorage`). Jeśli skrypt się przerwie albo zamkniesz kartę, po ponownym uruchomieniu nie przechodzi ponownie stron ocen i pobiera tylko brakujące tytuły. Po udanym przebiegu pamięć jest czyszczona. Jeśli w międzyczasie oceniłeś nowe filmy i chcesz zacząć od zera, skrypt wypisze w konsoli polecenie czyszczące pamięć.
 - Jeśli Filmweb nie odpowie na zapytanie w ciągu 30 s, skrypt je przerywa, zwalnia i ponawia, zamiast czekać w nieskończoność.
 - Częste zmiany na stronie Filmweb'u powodują, że skrypty i API szybko stają się nieaktualne. Gdyby tak się stało, można śmiało zgłaszać swoje _PR_ lub _Issues_.
 
