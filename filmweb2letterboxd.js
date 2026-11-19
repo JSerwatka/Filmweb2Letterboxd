@@ -24,6 +24,15 @@
     // Ponawianie zapytań po błędach sieci, 429 i 5xx.
     maxRetries: 4,
     retryBaseDelayMs: 5000,
+    // Maksymalny czas oczekiwania wg nagłówka Retry-After (dłuższe wartości są przycinane).
+    maxRetryAfterMs: 5 * 60 * 1000,
+
+    // Po tylu ms bez odpowiedzi zapytanie jest przerywane i ponawiane (bez tego mogłoby wisieć w nieskończoność).
+    requestTimeoutMs: 30000,
+
+    // Pobrane tytuły są zapamiętywane w przeglądarce, więc ponowne uruchomienie po przerwaniu nie zaczyna od zera.
+    // Pamięć jest czyszczona po udanym przebiegu.
+    persistCache: true,
 
     // Zabezpieczenie przed nieskończonym stronicowaniem.
     maxPages: 500,
@@ -74,7 +83,9 @@
       if (this.requestCount >= this.nextLongPauseAt) {
         this.nextLongPauseAt =
           this.requestCount + randomBetween(CONFIG.longPauseEveryMin, CONFIG.longPauseEveryMax);
-        await sleep(randomBetween(CONFIG.longPauseMinMs, CONFIG.longPauseMaxMs) * this.slowdown);
+        const pause = randomBetween(CONFIG.longPauseMinMs, CONFIG.longPauseMaxMs) * this.slowdown;
+        console.log(`Krótka przerwa (${Math.round(pause / 1000)} s)…`);
+        await sleep(pause);
         return;
       }
       await sleep(randomBetween(CONFIG.delayMinMs, CONFIG.delayMaxMs) * this.slowdown);
@@ -92,7 +103,7 @@
   function retryDelayMs(attempt, response) {
     const retryAfter = Number(response?.headers.get("Retry-After"));
     if (Number.isFinite(retryAfter) && retryAfter > 0) {
-      return retryAfter * 1000;
+      return Math.min(retryAfter * 1000, CONFIG.maxRetryAfterMs);
     }
     // 5 s, 15 s, 45 s, 135 s … + losowy rozrzut
     return CONFIG.retryBaseDelayMs * 3 ** attempt + randomBetween(0, 2000);
@@ -102,27 +113,45 @@
     for (let attempt = 0; ; attempt++) {
       await throttle.beforeRequest();
 
+      // Timeout obejmuje zarówno nawiązanie połączenia, jak i odczyt treści odpowiedzi.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);
+
       let response;
+      let data;
       try {
         // Ciasteczka sesji są wysyłane automatycznie (to samo źródło), nie trzeba ich dodawać ręcznie.
         response = await fetch(API_BASE + endpoint, {
           method: "GET",
           credentials: "same-origin",
           headers: { "X-Locale": "pl" },
+          signal: controller.signal,
         });
+        if (response.ok) {
+          data = await response.json();
+        }
       } catch (networkError) {
+        const timedOut = networkError.name === "AbortError";
+        const reason = timedOut
+          ? `brak odpowiedzi od ${Math.round(CONFIG.requestTimeoutMs / 1000)} s`
+          : `błąd sieci: ${networkError.message}`;
         if (attempt >= CONFIG.maxRetries) {
-          throw new Error(`Błąd sieci (${endpoint}): ${networkError.message}`);
+          throw new Error(`${reason} (${endpoint})`);
+        }
+        if (timedOut) {
+          throttle.onThrottled(); // serwer przytrzymuje zapytania – zwalniamy
         }
         const wait = retryDelayMs(attempt);
-        console.warn(`Błąd sieci, ponawiam za ${Math.round(wait / 1000)} s… (${endpoint})`);
+        console.warn(`${reason[0].toUpperCase()}${reason.slice(1)}, ponawiam za ${Math.round(wait / 1000)} s… (${endpoint})`);
         await sleep(wait);
         continue;
+      } finally {
+        clearTimeout(timer);
       }
 
       if (response.ok) {
         throttle.onSuccess();
-        return response.json();
+        return data;
       }
 
       if (response.status === 401 || response.status === 403) {
@@ -149,11 +178,50 @@
 
   // ---------- pobieranie danych ----------
 
+  const CACHE_KEY = "Filmweb2Letterboxd_titleInfoCache";
   const titleInfoCache = new Map();
+  let unsavedCacheEntries = 0;
+
+  function loadCache() {
+    if (!CONFIG.persistCache) {
+      return;
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
+      Object.entries(stored).forEach(([id, info]) => titleInfoCache.set(Number(id), info));
+      if (titleInfoCache.size > 0) {
+        console.log(`Wznawiam: ${titleInfoCache.size} tytułów wczytanych z poprzedniego uruchomienia.`);
+      }
+    } catch (e) {
+      console.warn("Nie udało się wczytać zapamiętanych tytułów – pobieram od nowa.");
+    }
+  }
+
+  function saveCache(force = false) {
+    if (!CONFIG.persistCache || (!force && unsavedCacheEntries < 10)) {
+      return;
+    }
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(titleInfoCache)));
+      unsavedCacheEntries = 0;
+    } catch (e) {
+      // Brak miejsca lub zablokowany localStorage – skrypt działa dalej, tylko bez wznawiania.
+    }
+  }
+
+  function clearCache() {
+    try {
+      localStorage.removeItem(CACHE_KEY);
+    } catch (e) {}
+  }
 
   async function getTitleInfo(id) {
     if (!titleInfoCache.has(id)) {
-      titleInfoCache.set(id, await fetchApi(`title/${id}/info`));
+      const info = await fetchApi(`title/${id}/info`);
+      // Zapamiętujemy tylko potrzebne pola, żeby nie zapchać localStorage.
+      titleInfoCache.set(id, { title: info.title, originalTitle: info.originalTitle, year: info.year });
+      unsavedCacheEntries++;
+      saveCache();
     }
     return titleInfoCache.get(id);
   }
@@ -341,6 +409,7 @@
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
 
+  loadCache();
   console.log("Rozpoczynam pobieranie, cierpliwości…");
   console.log("Proszę nie zamykać, przełączać, ani minimalizować tego okna!");
   console.log(
@@ -401,6 +470,13 @@
 
   document.removeEventListener("visibilitychange", onVisibilityChange);
 
+  const complete = !fatal && allFailures.length === 0;
+  if (complete) {
+    clearCache();
+  } else {
+    saveCache(true);
+  }
+
   if (files.length > 0) {
     console.log("Rozpoczynam zapisywanie plików CSV. Jeśli przeglądarka zapyta o pobieranie wielu plików – zezwól.");
     await downloadAll(files);
@@ -416,5 +492,11 @@
     console.error("Zapisane pliki zawierają tylko dane pobrane przed przerwaniem.");
   } else {
     console.log("Gotowe!");
+  }
+  if (!complete && CONFIG.persistCache) {
+    console.log(
+      "Pobrane tytuły zostały zapamiętane – po ponownym uruchomieniu skrypt pobierze tylko brakujące. " +
+        `Aby wyczyścić pamięć: localStorage.removeItem("${CACHE_KEY}")`
+    );
   }
 })();

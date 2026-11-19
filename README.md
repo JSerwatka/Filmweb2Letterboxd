@@ -68,6 +68,8 @@ Zaloguj się, a następnie:
 - Skrypt celowo robi losowe przerwy między zapytaniami (oraz co jakiś czas dłuższą pauzę), żeby nie obciążać Filmweb'u i nie zostać potraktowanym jak bot. Gdy serwer odpowiada błędem przeciążenia (429/5xx), skrypt zwalnia i ponawia zapytanie. Dlatego duże kolekcje (kilka tysięcy ocen) mogą się pobierać kilkadziesiąt minut – w konsoli widać postęp i szacowany pozostały czas. Tempo można zmienić w sekcji `KONFIGURACJA`.
 - Jeśli przełączysz kartę, przeglądarka może bardzo spowolnić skrypt – dlatego zostaw ją na wierzchu.
 - Jeśli skrypt zostanie przerwany (np. wylogowanie), zapisze dane pobrane do tego momentu i wyświetli komunikat.
+- Pobrane tytuły są zapamiętywane w przeglądarce (`localStorage`). Jeśli skrypt się przerwie albo zamkniesz kartę, po ponownym uruchomieniu pobierze tylko brakujące tytuły. Po udanym przebiegu pamięć jest czyszczona.
+- Jeśli Filmweb nie odpowie na zapytanie w ciągu 30 s, skrypt je przerywa, zwalnia i ponawia, zamiast czekać w nieskończoność.
 - Częste zmiany na stronie Filmweb'u powodują, że skrypty i API szybko stają się nieaktualne. Gdyby tak się stało, można śmiało zgłaszać swoje _PR_ lub _Issues_.
 
 ## Letterboxd Tweaks
